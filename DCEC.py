@@ -31,16 +31,16 @@ class ClusteringLayer(Layer):
     def __init__(self, n_clusters, weights=None, alpha=1.0, **kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
-        super(ClusteringLayer, self).__init__(**kwargs)
-        self.n_clusters = n_clusters
+        super(ClusteringLayer, self).__init__(**kwargs)  #将值传给从父类layer继承来的属性中
+        self.n_clusters = n_clusters                     #子类中新增的属性
         self.alpha = alpha
         self.initial_weights = weights
-        self.input_spec = InputSpec(ndim=2)
+        self.input_spec = InputSpec(ndim=2)    #设置为2维
 
     def build(self, input_shape):
-        assert len(input_shape) == 2
+        assert len(input_shape) == 2      #由于维度是2，所以shape的长度也是2
         input_dim = input_shape[1]
-        self.input_spec = InputSpec(dtype=K.floatx(), shape=(None, input_dim))
+        self.input_spec = InputSpec(dtype=K.floatx(), shape=(None, input_dim)) 
         self.clusters = self.add_weight((self.n_clusters, input_dim), initializer='glorot_uniform', name='clusters')
         if self.initial_weights is not None:
             self.set_weights(self.initial_weights)
