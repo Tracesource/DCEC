@@ -43,7 +43,7 @@ class ClusteringLayer(Layer):
         self.input_spec = InputSpec(dtype=K.floatx(), shape=(None, input_dim)) 
         self.clusters = self.add_weight((self.n_clusters, input_dim), initializer='glorot_uniform', name='clusters')
         if self.initial_weights is not None:
-            self.set_weights(self.initial_weights)
+            self.set_weights(self.initial_weights) #由于维度是2，所以shape的长度也是2
             del self.initial_weights
         self.built = True
 
