@@ -38,12 +38,12 @@ class ClusteringLayer(Layer):
         self.input_spec = InputSpec(ndim=2)    #设置为2维
 
     def build(self, input_shape):
-        assert len(input_shape) == 2      #由于维度是2，所以shape的长度也是2
-        input_dim = input_shape[1]
+        assert len(input_shape) == 2      #由于维度是2，所以shape的长度也是2，assert判断表达式，为false时触发异常
+        input_dim = input_shape[1]        #shape第一维是样本数，第二维是样本的维度，这里为了得到样本的维度
         self.input_spec = InputSpec(dtype=K.floatx(), shape=(None, input_dim)) 
-        self.clusters = self.add_weight((self.n_clusters, input_dim), initializer='glorot_uniform', name='clusters')
+        self.clusters = self.add_weight((self.n_clusters, input_dim), initializer='glorot_uniform', name='clusters') #shape第一维是聚类数，第二维是维度
         if self.initial_weights is not None:
-            self.set_weights(self.initial_weights) #由于维度是2，所以shape的长度也是2
+            self.set_weights(self.initial_weights)  #如果有传入初始权重就设置为初始权重weights
             del self.initial_weights
         self.built = True
 
@@ -54,17 +54,21 @@ class ClusteringLayer(Layer):
             inputs: the variable containing data, shape=(n_samples, n_features)
         Return:
             q: student's t-distribution, or soft labels for each sample. shape=(n_samples, n_clusters)
+        import keras.backend as K
+        将聚类中心作为可训练的权值，通过t分布将嵌入点映射为软标签
+        K.expand_dim在inputs中增加一维
+        K.sum计算张量指定轴的和
         """
-        q = 1.0 / (1.0 + (K.sum(K.square(K.expand_dims(inputs, axis=1) - self.clusters), axis=2) / self.alpha))
-        q **= (self.alpha + 1.0) / 2.0
+        q = 1.0 / (1.0 + (K.sum(K.square(K.expand_dims(inputs, axis=1) - self.clusters), axis=2) / self.alpha)) 
+        q **= (self.alpha + 1.0) / 2.0  #c **= a 等效于 c = c ** a
         q = K.transpose(K.transpose(q) / K.sum(q, axis=1))
         return q
 
-    def compute_output_shape(self, input_shape):
+    def compute_output_shape(self, input_shape):     #修改了输入的shape，在这里指定shape变化的方法
         assert input_shape and len(input_shape) == 2
         return input_shape[0], self.n_clusters
 
-    def get_config(self):
+    def get_config(self):     #获取当前层的参数信息
         config = {'n_clusters': self.n_clusters}
         base_config = super(ClusteringLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
