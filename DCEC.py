@@ -89,14 +89,14 @@ class DCEC(object):
         self.pretrained = False
         self.y_pred = []
 
-        self.cae = CAE(input_shape, filters)
-        hidden = self.cae.get_layer(name='embedding').output
+        self.cae = CAE(input_shape, filters)     #调用自编码器
+        hidden = self.cae.get_layer(name='embedding').output    #将嵌入层得到的嵌入特征保留
         self.encoder = Model(inputs=self.cae.input, outputs=hidden)
 
         # Define DCEC model
-        clustering_layer = ClusteringLayer(self.n_clusters, name='clustering')(hidden)
+        clustering_layer = ClusteringLayer(self.n_clusters, name='clustering')(hidden)   #将嵌入层的输出作为聚类层的输入
         self.model = Model(inputs=self.cae.input,
-                           outputs=[clustering_layer, self.cae.output])
+                           outputs=[clustering_layer, self.cae.output])      #定义DCEC的模型
 
     def pretrain(self, x, batch_size=256, epochs=200, optimizer='adam', save_dir='results/temp'):
         print('...Pretraining...')
