@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     # compile the model and callbacks
     optimizer = 'adam'
-    model.compile(optimizer=optimizer, loss='mse')  #定义模型的优化器与损失函数
+    model.compile(optimizer=optimizer, loss='mse')  #定义模型的优化器与损失函数，mse即均方误差
     from keras.callbacks import CSVLogger     #回调函数，查看函数内部状态
     csv_logger = CSVLogger(args.save_dir + '/%s-pretrain-log.csv' % args.dataset)
 
@@ -69,19 +69,18 @@ if __name__ == "__main__":
     t0 = time()
     model.fit(x, x, batch_size=args.batch_size, epochs=args.epochs, callbacks=[csv_logger])
     print('Training time: ', time() - t0)
-    model.save(args.save_dir + '/%s-pre
-    train-model-%d.h5' % (args.dataset, args.epochs))
+    model.save(args.save_dir + '/%s-pretrain-model-%d.h5' % (args.dataset, args.epochs))
 
     # extract features
-    feature_model = Model(inputs=model.input, outputs=model.get_layer(name='embedding').output)
-    features = feature_model.predict(x)
-    print('feature shape=', features.shape)
+    feature_model = Model(inputs=model.input, outputs=model.get_layer(name='embedding').output)   #构造一个从输入到嵌入层的编码器模型
+    features = feature_model.predict(x)     #获得输入数据对应的输出（即特征嵌入，也就是数据特征的新形式）
+    print('feature shape=', features.shape) 
 
     # use features for clustering
     from sklearn.cluster import KMeans
     km = KMeans(n_clusters=args.n_clusters)
 
     features = np.reshape(features, newshape=(features.shape[0], -1))
-    pred = km.fit_predict(features)
+    pred = km.fit_predict(features)   #对特征嵌入进行kmeans，得到聚类中心
     from . import metrics
     print('acc=', metrics.acc(y, pred), 'nmi=', metrics.nmi(y, pred), 'ari=', metrics.ari(y, pred))

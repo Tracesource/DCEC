@@ -62,7 +62,7 @@ class ClusteringLayer(Layer):
         q = 1.0 / (1.0 + (K.sum(K.square(K.expand_dims(inputs, axis=1) - self.clusters), axis=2) / self.alpha)) 
         q **= (self.alpha + 1.0) / 2.0  #c **= a 等效于 c = c ** a
         q = K.transpose(K.transpose(q) / K.sum(q, axis=1))
-        return q
+        return q     #qij代表了zi属于类别j的可能性
 
     def compute_output_shape(self, input_shape):     #修改了输入的shape，在这里指定shape变化的方法
         assert input_shape and len(input_shape) == 2
@@ -91,47 +91,47 @@ class DCEC(object):
 
         self.cae = CAE(input_shape, filters)     #调用自编码器
         hidden = self.cae.get_layer(name='embedding').output    #将嵌入层得到的嵌入特征保留
-        self.encoder = Model(inputs=self.cae.input, outputs=hidden)
+        self.encoder = Model(inputs=self.cae.input, outputs=hidden)   #由cae的输入到嵌入层构建encoder模型
 
         # Define DCEC model
         clustering_layer = ClusteringLayer(self.n_clusters, name='clustering')(hidden)   #将嵌入层的输出作为聚类层的输入
         self.model = Model(inputs=self.cae.input,
-                           outputs=[clustering_layer, self.cae.output])      #定义DCEC的模型
+                           outputs=[clustering_layer, self.cae.output])      #定义DCEC的模型（从cae的输入开始，最后输出有cae的输出和聚类层的输出）
 
-    def pretrain(self, x, batch_size=256, epochs=200, optimizer='adam', save_dir='results/temp'):
+    def pretrain(self, x, batch_size=256, epochs=200, optimizer='adam', save_dir='results/temp'): #预训练：对自编码器的参数
         print('...Pretraining...')
         self.cae.compile(optimizer=optimizer, loss='mse')
         from keras.callbacks import CSVLogger
-        csv_logger = CSVLogger(args.save_dir + '/pretrain_log.csv')
+        csv_logger = CSVLogger(args.save_dir + '/pretrain_log.csv')  #将epoch结果流式传输到csv文件的回调
 
         # begin training
         t0 = time()
-        self.cae.fit(x, x, batch_size=batch_size, epochs=epochs, callbacks=[csv_logger])
+        self.cae.fit(x, x, batch_size=batch_size, epochs=epochs, callbacks=[csv_logger])  #执行cae模型
         print('Pretraining time: ', time() - t0)
         self.cae.save(save_dir + '/pretrain_cae_model.h5')
         print('Pretrained weights are saved to %s/pretrain_cae_model.h5' % save_dir)
         self.pretrained = True
 
     def load_weights(self, weights_path):
-        self.model.load_weights(weights_path)
+        self.model.load_weights(weights_path)   #读取权重
 
     def extract_feature(self, x):  # extract features from before clustering layer
-        return self.encoder.predict(x)
+        return self.encoder.predict(x)   #使用encoder模型得到数据x的特征嵌入（即提取数据的特征）
 
     def predict(self, x):
         q, _ = self.model.predict(x, verbose=0)
         return q.argmax(1)
 
     @staticmethod
-    def target_distribution(q):
+    def target_distribution(q):    #得到目标分布P
         weight = q ** 2 / q.sum(0)
         return (weight.T / weight.sum(1)).T
 
-    def compile(self, loss=['kld', 'mse'], loss_weights=[1, 1], optimizer='adam'):
+    def compile(self, loss=['kld', 'mse'], loss_weights=[1, 1], optimizer='adam'):  #重写编译函数（对网络学习过程进行配置）
         self.model.compile(loss=loss, loss_weights=loss_weights, optimizer=optimizer)
 
     def fit(self, x, y=None, batch_size=256, maxiter=2e4, tol=1e-3,
-            update_interval=140, cae_weights=None, save_dir='./results/temp'):
+            update_interval=140, cae_weights=None, save_dir='./results/temp'):  #重写运行函数fit
 
         print('Update interval', update_interval)
         save_interval = x.shape[0] / batch_size * 5
@@ -139,12 +139,12 @@ class DCEC(object):
 
         # Step 1: pretrain if necessary
         t0 = time()
-        if not self.pretrained and cae_weights is None:
+        if not self.pretrained and cae_weights is None:   #如果没有进行预训练且参数为空则预训练
             print('...pretraining CAE using default hyper-parameters:')
             print('   optimizer=\'adam\';   epochs=200')
             self.pretrain(x, batch_size, save_dir=save_dir)
             self.pretrained = True
-        elif cae_weights is not None:
+        elif cae_weights is not None:      #参数不为空则加载参数
             self.cae.load_weights(cae_weights)
             print('cae_weights is loaded successfully.')
 
@@ -154,7 +154,7 @@ class DCEC(object):
         kmeans = KMeans(n_clusters=self.n_clusters, n_init=20)
         self.y_pred = kmeans.fit_predict(self.encoder.predict(x))
         y_pred_last = np.copy(self.y_pred)
-        self.model.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
+        self.model.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])  #使用kmeans得到初始的聚类中心传入聚类层
 
         # Step 3: deep clustering
         # logging file
@@ -169,12 +169,12 @@ class DCEC(object):
         loss = [0, 0, 0]
         index = 0
         for ite in range(int(maxiter)):
-            if ite % update_interval == 0:
+            if ite % update_interval == 0:  #每T次迭代使用所有嵌入点更新目标分布
                 q, _ = self.model.predict(x, verbose=0)
                 p = self.target_distribution(q)  # update the auxiliary target distribution p
 
-                # evaluate the clustering performance
-                self.y_pred = q.argmax(1)
+                # evaluate the clustering performance使用新分布更新聚类性能
+                self.y_pred = q.argmax(1) 
                 if y is not None:
                     acc = np.round(metrics.acc(y, self.y_pred), 5)
                     nmi = np.round(metrics.nmi(y, self.y_pred), 5)
@@ -184,7 +184,7 @@ class DCEC(object):
                     logwriter.writerow(logdict)
                     print('Iter', ite, ': Acc', acc, ', nmi', nmi, ', ari', ari, '; loss=', loss)
 
-                # check stop criterion
+                # check stop criterion  #检查是否收敛（标签分配变化小于阈值）
                 delta_label = np.sum(self.y_pred != y_pred_last).astype(np.float32) / self.y_pred.shape[0]
                 y_pred_last = np.copy(self.y_pred)
                 if ite > 0 and delta_label < tol:
@@ -204,7 +204,7 @@ class DCEC(object):
                                                     x[index * batch_size:(index + 1) * batch_size]])
                 index += 1
 
-            # save intermediate model
+            # save intermediate model   按保存间隔保存中间模型
             if ite % save_interval == 0:
                 # save DCEC model checkpoints
                 print('saving model to:', save_dir + '/dcec_model_' + str(ite) + '.h5')
@@ -260,7 +260,7 @@ if __name__ == "__main__":
 
     # begin clustering.
     optimizer = 'adam'
-    dcec.compile(loss=['kld', 'mse'], loss_weights=[args.gamma, 1], optimizer=optimizer)
+    dcec.compile(loss=['kld', 'mse'], loss_weights=[args.gamma, 1], optimizer=optimizer)  #kld即kl散度
     dcec.fit(x, y=y, tol=args.tol, maxiter=args.maxiter,
              update_interval=args.update_interval,
              save_dir=args.save_dir,
